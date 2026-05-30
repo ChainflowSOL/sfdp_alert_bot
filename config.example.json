@@ -1,0 +1,20 @@
+{
+  "telegram": {
+    "bot_token": "PASTE_BOT_TOKEN_FROM_BOTFATHER",
+    "chat_ids": ["-1001234567890"]
+  },
+
+  "poll_interval_seconds": 300,
+  "heartbeat_interval_hours": 24,
+  "clusters": ["mainnet-beta", "testnet"],
+  "state_file": "sfdp_state.json",
+
+  "validators": [
+    {
+      "name": "my-testnet-val",
+      "cluster": "testnet",
+      "client": "agave",
+      "rpc_url": "http://127.0.0.1:8899"
+    }
+  ]
+}

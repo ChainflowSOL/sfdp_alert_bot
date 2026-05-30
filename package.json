@@ -1,0 +1,24 @@
+{
+  "name": "sfdp-alert-bot",
+  "version": "1.0.0",
+  "description": "Telegram alert bot for Solana SFDP required-version changes and validator compliance",
+  "license": "MIT",
+  "bin": {
+    "sfdp-alert-bot": "dist/sfdpAlertBot.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/sfdpAlertBot.js",
+    "once": "node dist/sfdpAlertBot.js --once",
+    "dev": "tsx src/sfdpAlertBot.ts",
+    "test": "tsx test/logic.test.ts"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets & local config
+.env
+.env.*
+config.json
+
+# Runtime state
+sfdp_state.json
+*.tmp
+
+# Logs
+*.log
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+.claude
