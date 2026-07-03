@@ -2,7 +2,7 @@
   "name": "sfdp-alert-bot",
   "version": "1.0.0",
   "description": "Telegram alert bot for Solana SFDP required-version changes and validator compliance",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bin": {
     "sfdp-alert-bot": "dist/sfdpAlertBot.js"
   },
