@@ -148,6 +148,51 @@ async function run() {
   assert.strictEqual(msg2, null);
   console.log("OK  compliant node produces no alert");
 
+  // --- #1: an unreachable validator alerts on the transition, then recovers ---
+  {
+    // Simulate an RPC that is down: fetch rejects.
+    globalThis.fetch = (async () => {
+      throw new Error("ECONNREFUSED 127.0.0.1:8899");
+    }) as typeof fetch;
+
+    // Coming from a healthy signature -> should alert and use a stable signature.
+    const [downMsg, downSig] = await checkCompliance(
+      validator as any,
+      entries as any,
+      "agave|4.0.0-rc1|req=4.0.0-rc1..*|now_ok=true|up=[]",
+    );
+    assert.ok(downMsg && downMsg.includes("UNREACHABLE"), "should alert when validator goes unreachable");
+    assert.strictEqual(downSig, "unreachable", "unreachable signature must be stable/error-independent");
+
+    // Still down: the signature is unchanged so runOnce's dedup suppresses repeats.
+    const [, downSig2] = await checkCompliance(validator as any, entries as any, downSig);
+    assert.strictEqual(downSig2, downSig, "repeat unreachable poll keeps the same signature (no re-alert)");
+    console.log("OK  unreachable validator alerts once on transition");
+
+    // Recovery: reachable + compliant again, previously unreachable -> recovery alert.
+    mockFetch("4.0.0-rc1");
+    const [recMsg] = await checkCompliance(validator as any, entries as any, "unreachable");
+    assert.ok(recMsg && recMsg.includes("back online"), "should announce recovery from unreachable");
+    console.log("OK  recovery from unreachable produces a 'back online' alert");
+  }
+
+  // --- #2: a tightening requirement re-alerts a still-non-compliant node ---
+  {
+    mockFetch("2.1.0"); // node stays on 2.1.0 throughout
+    const reqMin22 = [
+      { epoch: 1020, agave_min_version: "2.2.0", agave_max_version: null, firedancer_min_version: null, firedancer_max_version: null, inherited_from_prev_epoch: false },
+    ];
+    const reqMin23 = [
+      { epoch: 1020, agave_min_version: "2.3.0", agave_max_version: null, firedancer_min_version: null, firedancer_max_version: null, inherited_from_prev_epoch: false },
+    ];
+    const [m1, sig1] = await checkCompliance(validator as any, reqMin22 as any);
+    const [m2, sig2] = await checkCompliance(validator as any, reqMin23 as any, sig1);
+    assert.ok(m1 && m1.includes("NON-COMPLIANT"));
+    assert.ok(m2 && m2.includes("NON-COMPLIANT"));
+    assert.notStrictEqual(sig1, sig2, "tightening the requirement must change the signature so runOnce re-alerts");
+    console.log("OK  tightening requirement re-alerts a still-non-compliant node");
+  }
+
   globalThis.fetch = realFetch;
   console.log("\nALL TESTS PASSED");
 }

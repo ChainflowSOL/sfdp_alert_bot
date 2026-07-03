@@ -392,9 +392,14 @@ function effectiveRequirement(entries: ReqEntry[], epoch: number): ReqEntry | nu
   return eff ?? (entries.length ? entries[0] : null);
 }
 
+// Stable signature for an unreachable validator. Kept independent of the error
+// text so a flapping error message doesn't re-fire the "unreachable" alert.
+const UNREACHABLE_SIG = "unreachable";
+
 async function checkCompliance(
   validator: ValidatorCfg,
   entries: ReqEntry[],
+  prevSig?: string,
 ): Promise<[string | null, string]> {
   const name = validator.name ?? "validator";
   const cluster = validator.cluster;
@@ -409,8 +414,18 @@ async function checkCompliance(
     currentEpoch = await fetchCurrentEpoch(rpcUrl);
   } catch (e) {
     LOG.warn(`Could not query validator ${name} (${rpcUrl}): ${String(e)}`);
-    return [null, `unreachable:${String(e)}`];
+    // Alert on the transition into "unreachable" so operators learn their
+    // validator's RPC went dark. The stable signature means runOnce fires this
+    // only once until the node recovers.
+    const msg =
+      `📵 <b>Validator UNREACHABLE</b>\n` +
+      `Validator: <b>${esc(name)}</b> (${esc(cluster)}, ${esc(client)})\n` +
+      `Could not query its RPC (${esc(rpcUrl)}).\n` +
+      `Error: ${esc(String(e))}`;
+    return [msg, UNREACHABLE_SIG];
   }
+
+  const wasUnreachable = prevSig === UNREACHABLE_SIG;
 
   if (!entries.length) return [null, "no-requirements"];
 
@@ -437,9 +452,24 @@ async function checkCompliance(
     if (fmn && compareVersions(nodeVer, fmn) < 0) upcoming.push([e.epoch, fmn]);
   }
 
-  const signature = `${client}|${nodeVer}|now_ok=${problems.length === 0}|up=${JSON.stringify(upcoming)}`;
+  // Include the in-force requirement range in the signature so that a node which
+  // stays non-compliant while the requirement itself tightens (e.g. the required
+  // minimum moves up again) is re-alerted instead of silently deduped.
+  const req = `${mn ?? "*"}..${mx ?? "*"}`;
+  const signature = `${client}|${nodeVer}|req=${req}|now_ok=${problems.length === 0}|up=${JSON.stringify(upcoming)}`;
 
-  if (!problems.length && !upcoming.length) return [null, signature];
+  if (!problems.length && !upcoming.length) {
+    // Healthy. If we were previously unreachable, announce the recovery.
+    if (wasUnreachable) {
+      const msg =
+        `✅ <b>Validator back online &amp; compliant</b>\n` +
+        `Validator: <b>${esc(name)}</b> (${esc(cluster)}, ${esc(client)})\n` +
+        `Running: <b>${esc(nodeVer)}</b>\n` +
+        `Required now (epoch ${currentEpoch}): ${fmtRange(mn, mx)}`;
+      return [msg, signature];
+    }
+    return [null, signature];
+  }
 
   const lines: string[] = [];
   lines.push(problems.length ? `🚨 <b>Validator NON-COMPLIANT</b>` : `🔔 <b>Validator upgrade needed soon</b>`);
@@ -574,8 +604,8 @@ async function runOnce(cfg: Config, dryRun = false): Promise<void> {
   for (const validator of cfg.validators ?? []) {
     const window = state.requirements[validator.cluster] ?? {};
     const entries = Object.values(window).sort((a, b) => a.epoch - b.epoch);
-    const [msg, sig] = await checkCompliance(validator, entries);
     const key = validator.name ?? validator.rpc_url ?? "validator";
+    const [msg, sig] = await checkCompliance(validator, entries, state.compliance[key]);
     if (msg && state.compliance[key] !== sig) await notify(msg);
     state.compliance[key] = sig; // record latest signature; only alert on transitions
   }
